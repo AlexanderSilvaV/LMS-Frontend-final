@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -12,10 +13,8 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Aplicar a todas las rutas
         source: '/(.*)',
         headers: [
-          // Content Security Policy
           {
             key: 'Content-Security-Policy',
             value: [
@@ -24,7 +23,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self'",
-              "connect-src 'self' http://localhost:5253 http://135.148.148.88:5253 https:",
+              "connect-src 'self' http://localhost:5253 https://lms-backend-gfdne2eegdacg8gy.chilecentral-01.azurewebsites.net https:",
               "frame-src 'none'",
               "object-src 'none'",
               "base-uri 'self'",
@@ -32,7 +31,6 @@ const nextConfig = {
               "frame-ancestors 'none'"
             ].join('; ')
           },
-          // Security Headers
           {
             key: 'X-Frame-Options',
             value: 'DENY'
@@ -49,11 +47,6 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()'
           },
-          // HSTS (HTTP Strict Transport Security) - solo en producción
-          // {
-          //   key: 'Strict-Transport-Security',
-          //   value: 'max-age=31536000; includeSubDomains'
-          // }
         ],
       },
     ]
