@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: 'standalone',  // ← LÍNEA CRÍTICA AGREGADA
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -13,8 +13,10 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // Aplicar a todas las rutas
         source: '/(.*)',
         headers: [
+          // Content Security Policy
           {
             key: 'Content-Security-Policy',
             value: [
@@ -23,7 +25,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self'",
-              "connect-src 'self' http://localhost:5253 https://lms-backend-gfdne2eegdacg8gy.chilecentral-01.azurewebsites.net https:",
+              "connect-src 'self' https://lms-backend-gfdne2eegdacg8gy.chilecentral-01.azurewebsites.net https:",
               "frame-src 'none'",
               "object-src 'none'",
               "base-uri 'self'",
@@ -31,6 +33,7 @@ const nextConfig = {
               "frame-ancestors 'none'"
             ].join('; ')
           },
+          // Security Headers
           {
             key: 'X-Frame-Options',
             value: 'DENY'
