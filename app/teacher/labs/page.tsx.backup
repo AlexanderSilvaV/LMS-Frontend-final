@@ -1,0 +1,1206 @@
+"use client";
+
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import Link from "next/link";
+import { Sidebar } from "@/components/sidebar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "@/components/ui/use-toast";
+import { Download, Edit, FileText, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import * as XLSX from "xlsx";
+import { cursoService } from "@/app/lib/services/curso-service";
+import { evaluacionService } from "@/app/lib/evaluacion-service";
+import {
+  EvaluacionCreacionDTO,
+  EvaluacionDTO,
+  EvaluacionEdicionDTO,
+  PreguntaCreacionDTO,
+  OpcionCreacionDTO,
+} from "@/DTOs/EvaluacionDTOs";
+
+type PreguntaFormulario = PreguntaCreacionDTO & {
+  categoria?: string | null;
+  retroalimentacion?: string | null;
+};
+
+type LaboratorioFormData = Omit<EvaluacionCreacionDTO, "preguntas" | "esLaboratorio3DLab"> & {
+  preguntas: PreguntaFormulario[];
+};
+
+interface Curso {
+  id: number;
+  nombre: string;
+  nrc: string;
+}
+
+const OPCION_LETRAS = ["A", "B", "C", "D"] as const;
+
+export default function TeacherLabsPage() {
+  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [laboratorios, setLaboratorios] = useState<EvaluacionDTO[]>([]);
+  const [cursoSeleccionado, setCursoSeleccionado] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingLaboratorio, setEditingLaboratorio] = useState<EvaluacionDTO | null>(null);
+  const [importandoPreguntas, setImportandoPreguntas] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const archivoExcelRef = useRef<HTMLInputElement>(null);
+
+  const [formData, setFormData] = useState<LaboratorioFormData>({
+    titulo: "",
+    descripcion: "",
+    cursoId: 0,
+  fechaInicio: "",
+  fechaFin: "",
+  tiempoLimiteMins: 0,
+  intentosMaximos: 0,
+    preguntasMinimasLaboratorio: 12,
+    preguntasPorSesionLaboratorio: 4,
+    preguntas: [],
+  });
+
+  useEffect(() => {
+    const inicializar = async () => {
+      try {
+        setLoading(true);
+        const cursosAsignados = await cursoService.obtenerCursosAsignados();
+        if (!Array.isArray(cursosAsignados)) {
+          toast({
+            title: "Error",
+            description: "No se pudieron cargar los cursos asignados",
+            variant: "destructive",
+          });
+          setCursos([]);
+          return;
+        }
+
+        const cursosConvertidos: Curso[] = cursosAsignados.map((curso) => ({
+          id: curso.cursoId!,
+          nombre: curso.nombre,
+          nrc: curso.nrc.toString(),
+        }));
+
+        setCursos(cursosConvertidos);
+
+        if (cursosConvertidos.length > 0) {
+          const cursoInicial = cursosConvertidos[0].id.toString();
+          setCursoSeleccionado(cursoInicial);
+          await cargarLaboratoriosPorCurso(cursosConvertidos[0].id);
+          setFormData((prev) => ({ ...prev, cursoId: cursosConvertidos[0].id }));
+        }
+      } catch (error) {
+        console.error("Error al cargar cursos para laboratorios:", error);
+        toast({
+          title: "Error",
+          description: "Ocurrió un problema al cargar la información inicial",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void inicializar();
+  }, []);
+
+  const cargarLaboratoriosPorCurso = async (cursoId: number) => {
+    try {
+      const evaluaciones = await evaluacionService.obtenerEvaluacionesPorCurso(cursoId);
+      const laboratoriosFiltrados = (evaluaciones || []).filter((ev) => ev.esLaboratorio3DLab);
+      setLaboratorios(laboratoriosFiltrados);
+    } catch (error) {
+      console.error("Error al cargar laboratorios:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron obtener los laboratorios del curso",
+        variant: "destructive",
+      });
+      setLaboratorios([]);
+    }
+  };
+
+  const manejarCambioCurso = async (valor: string) => {
+    setCursoSeleccionado(valor);
+    const cursoId = Number.parseInt(valor, 10);
+    if (Number.isNaN(cursoId)) return;
+    await cargarLaboratoriosPorCurso(cursoId);
+    setFormData((prev) => ({ ...prev, cursoId }));
+  };
+
+  const resetForm = () => {
+    setFormData({
+      titulo: "",
+      descripcion: "",
+      cursoId: cursoSeleccionado ? Number.parseInt(cursoSeleccionado, 10) : 0,
+      fechaInicio: "",
+  fechaFin: "",
+  tiempoLimiteMins: 0,
+  intentosMaximos: 0,
+      preguntasMinimasLaboratorio: 12,
+      preguntasPorSesionLaboratorio: 4,
+      preguntas: [],
+    });
+    setEditingLaboratorio(null);
+    setDialogOpen(false);
+    setIsSaving(false);
+    setImportandoPreguntas(false);
+  };
+
+  const agregarPregunta = () => {
+    const nuevaPregunta: PreguntaFormulario = {
+      texto: "",
+      puntos: 1,
+      orden: formData.preguntas.length + 1,
+      categoria: "",
+      retroalimentacion: "",
+      opciones: OPCION_LETRAS.map((_, index) => ({
+        texto: "",
+        esCorrecta: index === 0,
+        orden: index + 1,
+      })),
+    };
+
+    setFormData((prev) => ({
+      ...prev,
+      preguntas: [...prev.preguntas, nuevaPregunta],
+    }));
+  };
+
+  const eliminarPregunta = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      preguntas: prev.preguntas.filter((_, i) => i !== index).map((pregunta, idx) => ({
+        ...pregunta,
+        orden: idx + 1,
+      })),
+    }));
+  };
+
+  const actualizarPregunta = (index: number, campo: keyof PreguntaFormulario, valor: unknown) => {
+    setFormData((prev) => ({
+      ...prev,
+      preguntas: prev.preguntas.map((pregunta, i) => (i === index ? { ...pregunta, [campo]: valor } : pregunta)),
+    }));
+  };
+
+  const agregarOpcion = (preguntaIndex: number) => {
+    setFormData((prev) => {
+      const pregunta = prev.preguntas[preguntaIndex];
+      if (!pregunta) return prev;
+
+      if (pregunta.opciones.length >= OPCION_LETRAS.length) {
+        toast({
+          title: "Límite alcanzado",
+          description: "Cada pregunta admite hasta cuatro opciones",
+        });
+        return prev;
+      }
+
+      const opcionesActualizadas = [
+        ...pregunta.opciones,
+        {
+          texto: "",
+          esCorrecta: false,
+          orden: pregunta.opciones.length + 1,
+        },
+      ];
+
+      return {
+        ...prev,
+        preguntas: prev.preguntas.map((p, idx) => (idx === preguntaIndex ? { ...p, opciones: opcionesActualizadas } : p)),
+      };
+    });
+  };
+
+  const eliminarOpcion = (preguntaIndex: number, opcionIndex: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      preguntas: prev.preguntas.map((pregunta, idx) => {
+        if (idx !== preguntaIndex) return pregunta;
+        const opcionesFiltradas = pregunta.opciones.filter((_, j) => j !== opcionIndex).map((opcion, orden) => ({
+          ...opcion,
+          orden: orden + 1,
+        }));
+        return { ...pregunta, opciones: opcionesFiltradas };
+      }),
+    }));
+  };
+
+  const actualizarOpcion = (
+    preguntaIndex: number,
+    opcionIndex: number,
+    campo: keyof OpcionCreacionDTO,
+    valor: unknown,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      preguntas: prev.preguntas.map((pregunta, idx) => {
+        if (idx !== preguntaIndex) return pregunta;
+        return {
+          ...pregunta,
+          opciones: pregunta.opciones.map((opcion, j) => (j === opcionIndex ? { ...opcion, [campo]: valor } : opcion)),
+        };
+      }),
+    }));
+  };
+
+  const descargarPlantillaExcel = () => {
+    const encabezados = [
+      [
+        "Enunciado",
+        "Categoria",
+        "Puntos",
+        "OpcionA",
+        "OpcionB",
+        "OpcionC",
+        "OpcionD",
+        "RespuestaCorrecta",
+        "Retroalimentacion",
+      ],
+    ];
+
+    const ejemplos = [
+      {
+        Enunciado: "Describe el procedimiento correcto para calibrar una balanza analítica.",
+        Categoria: "Equipamiento",
+        Puntos: 5,
+        OpcionA: "Se calibra sin masas patrón",
+        OpcionB: "Se utiliza una masa patrón certificada",
+        OpcionC: "Se limpia con agua",
+        OpcionD: "No requiere calibración",
+        RespuestaCorrecta: "B",
+        Retroalimentacion: "La calibración debe efectuarse con masas certificadas para garantizar precisión.",
+      },
+      {
+        Enunciado: "¿Cuál es el reactivo limitante en la reacción entre 2 mol de H2 y 1 mol de O2?",
+        Categoria: "Estequiometría",
+        Puntos: 4,
+        OpcionA: "H2",
+        OpcionB: "O2",
+        OpcionC: "H2O",
+        OpcionD: "Ninguno",
+        RespuestaCorrecta: "B",
+        Retroalimentacion: "La ecuación balanceada requiere 2 mol de H2 por cada mol de O2.",
+      },
+    ];
+
+    const hoja = XLSX.utils.aoa_to_sheet(encabezados);
+    XLSX.utils.sheet_add_json(hoja, ejemplos, {
+      origin: "A2",
+      skipHeader: true,
+    });
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Preguntas");
+
+    XLSX.writeFile(libro, "plantilla_laboratorio_3dlab.xlsx");
+
+    toast({
+      title: "Plantilla descargada",
+      description: "Revisa y edita la plantilla antes de importar tus preguntas",
+    });
+  };
+
+  const manejarImportacionExcel = async (event: ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0];
+    event.target.value = "";
+    if (!archivo) return;
+
+    setImportandoPreguntas(true);
+
+    try {
+      const data = await archivo.arrayBuffer();
+      const libro = XLSX.read(data, { type: "array" });
+      const hoja = libro.SheetNames[0];
+      const worksheet = libro.Sheets[hoja];
+
+      if (!worksheet) {
+        toast({
+          title: "Archivo inválido",
+          description: "La hoja principal del Excel no se pudo leer",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const filas = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
+      if (filas.length === 0) {
+        toast({ title: "Sin datos", description: "El archivo no contiene preguntas" });
+        return;
+      }
+
+      const errores: string[] = [];
+      const nuevasPreguntas: PreguntaFormulario[] = [];
+
+      const obtenerValor = (fila: Record<string, unknown>, key: string) => {
+        const entrada = Object.entries(fila).find(([columna]) => columna.trim().toLowerCase() === key.toLowerCase());
+        return entrada ? String(entrada[1] ?? "").trim() : "";
+      };
+
+      filas.forEach((fila, index) => {
+        const filaNumero = index + 2;
+        const enunciado = obtenerValor(fila, "Enunciado");
+        const categoria = obtenerValor(fila, "Categoria");
+        const puntosTexto = obtenerValor(fila, "Puntos");
+        const opcionA = obtenerValor(fila, "OpcionA");
+        const opcionB = obtenerValor(fila, "OpcionB");
+        const opcionC = obtenerValor(fila, "OpcionC");
+        const opcionD = obtenerValor(fila, "OpcionD");
+        const respuestaCorrecta = obtenerValor(fila, "RespuestaCorrecta").toUpperCase();
+        const retroalimentacion = obtenerValor(fila, "Retroalimentacion");
+
+        const erroresFila: string[] = [];
+
+        if (!enunciado) {
+          erroresFila.push(`Fila ${filaNumero}: El enunciado es obligatorio.`);
+        }
+
+        const puntos = Number.parseInt(puntosTexto, 10);
+        if (Number.isNaN(puntos) || puntos < 1 || puntos > 100) {
+          erroresFila.push(`Fila ${filaNumero}: Los puntos deben ser un número entre 1 y 100.`);
+        }
+
+        if (!opcionA || !opcionB) {
+          erroresFila.push(`Fila ${filaNumero}: Debe completar al menos las opciones A y B.`);
+        }
+
+        const textoOpciones: Record<(typeof OPCION_LETRAS)[number], string> = {
+          A: opcionA,
+          B: opcionB,
+          C: opcionC,
+          D: opcionD,
+        };
+
+        if (!OPCION_LETRAS.includes(respuestaCorrecta as (typeof OPCION_LETRAS)[number])) {
+          erroresFila.push(`Fila ${filaNumero}: La respuesta correcta debe ser A, B, C o D.`);
+        } else {
+          const letra = respuestaCorrecta as (typeof OPCION_LETRAS)[number];
+          if (!textoOpciones[letra]) {
+            erroresFila.push(`Fila ${filaNumero}: La opción ${respuestaCorrecta} marcada como correcta está vacía.`);
+          }
+        }
+
+        if (retroalimentacion && retroalimentacion.length > 2000) {
+          erroresFila.push(`Fila ${filaNumero}: La retroalimentación no puede superar los 2000 caracteres.`);
+        }
+
+        if (erroresFila.length > 0) {
+          errores.push(...erroresFila);
+          return;
+        }
+
+        const opciones = OPCION_LETRAS.reduce<OpcionCreacionDTO[]>((lista, letra) => {
+          const texto = textoOpciones[letra];
+          if (!texto) return lista;
+          return [
+            ...lista,
+            {
+              texto,
+              esCorrecta: respuestaCorrecta === letra,
+              orden: lista.length + 1,
+            },
+          ];
+        }, []);
+
+        if (opciones.length < 2) {
+          errores.push(`Fila ${filaNumero}: No se generaron suficientes opciones válidas.`);
+          return;
+        }
+
+        nuevasPreguntas.push({
+          texto: enunciado,
+          puntos,
+          orden: 0,
+          categoria,
+          retroalimentacion,
+          opciones,
+        });
+      });
+
+      if (errores.length > 0) {
+        toast({
+          title: "Errores en la importación",
+          description: `${errores.length} fila(s) contienen errores. Revisa la consola para más detalles`,
+          variant: "destructive",
+        });
+        console.warn("Errores en importación de laboratorios 3DLAB:", errores);
+      }
+
+      if (nuevasPreguntas.length === 0) {
+        if (errores.length === 0) {
+          toast({ title: "Sin preguntas válidas", description: "No se encontraron preguntas para importar" });
+        }
+        return;
+      }
+
+      setFormData((prev) => {
+        const preguntasActualizadas = [...prev.preguntas, ...nuevasPreguntas].map((pregunta, idx) => ({
+          ...pregunta,
+          orden: idx + 1,
+        }));
+
+        return {
+          ...prev,
+          preguntas: preguntasActualizadas,
+        };
+      });
+
+      toast({
+        title: "Preguntas importadas",
+        description: `${nuevasPreguntas.length} pregunta(s) agregadas desde Excel`,
+      });
+    } catch (error) {
+      console.error("Error al importar preguntas de laboratorio:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo procesar el archivo de preguntas",
+        variant: "destructive",
+      });
+    } finally {
+      setImportandoPreguntas(false);
+    }
+  };
+
+  const validarFormulario = (): boolean => {
+    console.log('🔍 Iniciando validación del formulario...');
+
+    if (!formData.titulo.trim()) {
+      console.log('❌ Validación falló: Título vacío');
+      toast({ title: "Error", description: "El título es obligatorio", variant: "destructive" });
+      return false;
+    }
+    console.log('✅ Título válido:', formData.titulo);
+
+    if (!formData.cursoId || formData.cursoId === 0) {
+      console.log('❌ Validación falló: Curso no seleccionado');
+      toast({ title: "Error", description: "Debe seleccionar un curso", variant: "destructive" });
+      return false;
+    }
+    console.log('✅ Curso válido:', formData.cursoId);
+
+    if (formData.preguntas.length === 0) {
+      console.log('❌ Validación falló: Sin preguntas');
+      toast({
+        title: "Error",
+        description: "Debe agregar al menos una pregunta",
+        variant: "destructive",
+      });
+      return false;
+    }
+    console.log('✅ Preguntas:', formData.preguntas.length);
+
+    const minimo = Math.max(4, formData.preguntasMinimasLaboratorio ?? 4);
+    console.log('🔢 Mínimo de preguntas requeridas:', minimo);
+    if (formData.preguntas.length < minimo) {
+      console.log(`❌ Validación falló: Solo hay ${formData.preguntas.length} preguntas, se requieren ${minimo}`);
+      toast({
+        title: "Configuración inválida",
+        description: `Debe configurar al menos ${minimo} preguntas para laboratorios 3DLAB`,
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    const preguntasPorSesion = Math.max(1, formData.preguntasPorSesionLaboratorio ?? 1);
+    console.log('🔢 Preguntas por sesión:', formData.preguntasPorSesionLaboratorio);
+    if (formData.preguntasPorSesionLaboratorio < 1) {
+      console.log('❌ Validación falló: Preguntas por sesión < 1');
+      toast({
+        title: "Configuración inválida",
+        description: "Las preguntas por sesión deben ser al menos 1",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (preguntasPorSesion > formData.preguntas.length) {
+      console.log(`❌ Validación falló: Preguntas por sesión (${preguntasPorSesion}) > Total preguntas (${formData.preguntas.length})`);
+      toast({
+        title: "Configuración inválida",
+        description: "Las preguntas por sesión no pueden exceder la cantidad total disponible",
+        variant: "destructive",
+      });
+      return false;
+    }
+    console.log('✅ Configuración de preguntas válida');
+
+    for (let i = 0; i < formData.preguntas.length; i++) {
+      const pregunta = formData.preguntas[i];
+
+      if (!pregunta.texto.trim()) {
+        toast({
+          title: "Error",
+          description: `La pregunta ${i + 1} debe tener texto`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (pregunta.opciones.length < 2) {
+        toast({
+          title: "Error",
+          description: `La pregunta ${i + 1} debe tener al menos 2 opciones`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (pregunta.opciones.length > OPCION_LETRAS.length) {
+        toast({
+          title: "Error",
+          description: `La pregunta ${i + 1} solo puede tener hasta ${OPCION_LETRAS.length} opciones (A-D)`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (!pregunta.opciones.some((opcion) => opcion.esCorrecta)) {
+        toast({
+          title: "Error",
+          description: `La pregunta ${i + 1} debe tener al menos una opción correcta`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (pregunta.opciones.some((opcion) => !opcion.texto.trim())) {
+        toast({
+          title: "Error",
+          description: `Todas las opciones de la pregunta ${i + 1} deben tener texto`,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (pregunta.retroalimentacion && pregunta.retroalimentacion.length > 2000) {
+        toast({
+          title: "Error",
+          description: `La retroalimentación de la pregunta ${i + 1} supera el límite de 2000 caracteres`,
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
+    console.log('✅✅✅ TODAS LAS VALIDACIONES PASARON ✅✅✅');
+    return true;
+  };
+
+  const manejarSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    console.log('🚀 SUBMIT INICIADO');
+    console.log('📋 Form Data:', formData);
+    if (!validarFormulario()) {
+      console.log('❌ Validación falló');
+      return;
+    }
+    console.log('✅ Validación pasó');
+
+    setIsSaving(true);
+
+    const preguntasPayload = formData.preguntas.map((pregunta, index) => ({
+      texto: pregunta.texto,
+      orden: index + 1,
+      puntos: pregunta.puntos,
+      opciones: pregunta.opciones.map((opcion, idx) => ({
+        texto: opcion.texto,
+        esCorrecta: opcion.esCorrecta,
+        orden: idx + 1,
+      })),
+    }));
+
+    const tiempoSinLimite = 0;
+    const intentosIlimitados = 0;
+
+    const laboratorioPayload: EvaluacionCreacionDTO = {
+      titulo: formData.titulo,
+      descripcion: formData.descripcion,
+      cursoId: formData.cursoId,
+      fechaInicio: undefined,
+      fechaFin: undefined,
+      tiempoLimiteMins: tiempoSinLimite,
+      intentosMaximos: intentosIlimitados,
+      esLaboratorio3DLab: true,
+      preguntasMinimasLaboratorio: formData.preguntasMinimasLaboratorio,
+      preguntasPorSesionLaboratorio: formData.preguntasPorSesionLaboratorio,
+      preguntas: preguntasPayload,
+    };
+
+    try {
+      if (editingLaboratorio) {
+        const edicionPayload: EvaluacionEdicionDTO = {
+          titulo: laboratorioPayload.titulo,
+          descripcion: laboratorioPayload.descripcion,
+          fechaInicio: undefined,
+          fechaFin: undefined,
+          tiempoLimiteMins: tiempoSinLimite,
+          intentosMaximos: intentosIlimitados,
+          esLaboratorio3DLab: true,
+          preguntasMinimasLaboratorio: laboratorioPayload.preguntasMinimasLaboratorio,
+          preguntasPorSesionLaboratorio: laboratorioPayload.preguntasPorSesionLaboratorio,
+          activa: true,
+        };
+
+        await evaluacionService.actualizarEvaluacion(editingLaboratorio.id, edicionPayload);
+        toast({ title: "Laboratorio actualizado", description: "Los cambios se guardaron correctamente" });
+      } else {
+        await evaluacionService.crearEvaluacion(laboratorioPayload);
+        toast({ title: "Laboratorio creado", description: "El laboratorio se creó correctamente" });
+      }
+
+      if (cursoSeleccionado) {
+        await cargarLaboratoriosPorCurso(Number.parseInt(cursoSeleccionado, 10));
+      }
+
+      resetForm();
+    } catch (error: any) {
+      console.error("Error al guardar laboratorio 3DLAB:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "No se pudo guardar el laboratorio",
+        variant: "destructive",
+      });
+      setIsSaving(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const manejarEdicion = (laboratorio: EvaluacionDTO) => {
+    setEditingLaboratorio(laboratorio);
+    setDialogOpen(true);
+    setFormData({
+      titulo: laboratorio.titulo,
+      descripcion: laboratorio.descripcion || "",
+      cursoId: laboratorio.cursoId,
+      fechaInicio: "",
+      fechaFin: "",
+      tiempoLimiteMins: 0,
+      intentosMaximos: laboratorio.intentosMaximos ?? 0,
+      preguntasMinimasLaboratorio: laboratorio.preguntasMinimasLaboratorio ?? 12,
+      preguntasPorSesionLaboratorio: laboratorio.preguntasPorSesionLaboratorio ?? 4,
+      preguntas: [],
+    });
+  };
+
+  const manejarEliminacion = async (id: number) => {
+    try {
+      await evaluacionService.eliminarEvaluacion(id);
+  toast({ title: "Laboratorio eliminado", description: "El laboratorio se eliminó correctamente" });
+      if (cursoSeleccionado) {
+        await cargarLaboratoriosPorCurso(Number.parseInt(cursoSeleccionado, 10));
+      }
+    } catch (error: any) {
+      console.error("Error al eliminar laboratorio:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "No se pudo eliminar el laboratorio",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const manejarDescargaExcel = async (laboratorio: EvaluacionDTO) => {
+    try {
+      const resultados = await evaluacionService.obtenerEstadisticasEvaluacion(laboratorio.id);
+
+      if (!Array.isArray(resultados) || resultados.length === 0) {
+        toast({
+          title: "Sin datos",
+          description: "No hay resultados disponibles para este laboratorio",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const datosExcel = resultados.map((resultado: any) => {
+        const porcentajeValor = resultado.porcentaje ?? resultado.Porcentaje;
+        const fechaValor = resultado.fechaRealizacion ?? resultado.FechaRealizacion;
+
+        return {
+          RUT: resultado.usuarioRut || resultado.UsuarioRut || "N/A",
+          Nombre: resultado.nombreCompleto || resultado.NombreCompleto || "N/A",
+          Calificación:
+            resultado.nota !== null && resultado.nota !== undefined
+              ? resultado.nota
+              : resultado.Nota !== null && resultado.Nota !== undefined
+              ? resultado.Nota
+              : "Pendiente",
+          Porcentaje:
+            porcentajeValor !== null && porcentajeValor !== undefined ? `${porcentajeValor}%` : "N/A",
+          "Número de Intentos": resultado.intentos ?? resultado.Intentos ?? 0,
+          "Fecha de Realización": fechaValor
+            ? format(new Date(fechaValor), "dd/MM/yyyy HH:mm", { locale: es })
+            : "N/A",
+          Estado: resultado.completada || resultado.Completada ? "Completada" : "Pendiente",
+          Correo: resultado.correo || resultado.Correo || "N/A",
+        };
+      });
+
+      const hoja = XLSX.utils.json_to_sheet(datosExcel);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Resultados Laboratorio");
+
+      const tituloLimpio = laboratorio.titulo.replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, "_");
+      const fechaActual = format(new Date(), "yyyy-MM-dd_HH-mm", { locale: es });
+      const nombreArchivo = `laboratorio_${tituloLimpio}_${fechaActual}.xlsx`;
+
+      XLSX.writeFile(libro, nombreArchivo);
+
+      toast({ title: "Descarga completada", description: "El archivo Excel se descargó correctamente" });
+    } catch (error) {
+      console.error("Error al descargar resultados de laboratorio:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo generar el archivo con los resultados",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-unab-gray-50 dark:bg-unab-navy-dark">
+        <Sidebar role="teacher" />
+        <div className="flex-1 flex items-center justify-center lg:ml-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+            <p className="mt-2 text-sm text-muted-foreground">Cargando laboratorios 3DLAB...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen bg-unab-gray-50 dark:bg-unab-navy-dark">
+      <Sidebar role="teacher" />
+      <div className="flex-1 flex flex-col overflow-hidden lg:ml-64">
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Laboratorios 3DLAB</h1>
+              <p className="text-unab-gray-600 dark:text-white">
+                Gestiona los laboratorios virtuales conectados con 3DLAB
+              </p>
+            </div>
+            <Dialog
+              open={dialogOpen}
+              onOpenChange={(open) => {
+                setDialogOpen(open);
+                if (!open) {
+                  resetForm();
+                }
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nuevo Laboratorio
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{editingLaboratorio ? "Editar laboratorio" : "Nuevo laboratorio"}</DialogTitle>
+                  <DialogDescription>
+                    {editingLaboratorio
+                      ? "Actualiza la configuración del laboratorio 3DLAB"
+                      : "Configura un nuevo laboratorio 3DLAB a partir de tus preguntas"}
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={manejarSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label htmlFor="titulo">Título *</Label>
+                      <Input
+                        id="titulo"
+                        value={formData.titulo}
+                        onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                        placeholder="Ej: Laboratorio Virtual 1"
+                        required
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label htmlFor="descripcion">Descripción</Label>
+                      <Textarea
+                        id="descripcion"
+                        value={formData.descripcion}
+                        onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                        placeholder="Describe el objetivo del laboratorio"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="curso">Curso *</Label>
+                      <Select
+                        value={formData.cursoId ? formData.cursoId.toString() : ""}
+                        onValueChange={(valor) => setFormData({ ...formData, cursoId: Number.parseInt(valor, 10) })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona un curso" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {cursos.map((curso) => (
+                            <SelectItem key={curso.id} value={curso.id.toString()}>
+                              {curso.nombre} (NRC: {curso.nrc})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div />
+                    <div className="col-span-2">
+                      <Label className="text-sm font-medium">Disponibilidad e intentos</Label>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Los laboratorios 3DLAB están siempre disponibles, sin fechas límite ni restricción en el número de intentos. El sistema aplicará estas reglas de forma automática.
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label htmlFor="preguntasMinimasLaboratorio">Preguntas mínimas requeridas</Label>
+                      <Input
+                        id="preguntasMinimasLaboratorio"
+                        type="number"
+                        min="4"
+                        value={formData.preguntasMinimasLaboratorio}
+                        onChange={(e) => {
+                          const valor = Number.parseInt(e.target.value, 10);
+                          setFormData({
+                            ...formData,
+                            preguntasMinimasLaboratorio: Number.isNaN(valor) ? 4 : Math.max(4, valor),
+                          });
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        3DLAB recomienda un mínimo de 12 preguntas para validar los resultados.
+                      </p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label htmlFor="preguntasPorSesionLaboratorio">Preguntas por sesión</Label>
+                      <Input
+                        id="preguntasPorSesionLaboratorio"
+                        type="number"
+                        min="1"
+                        value={formData.preguntasPorSesionLaboratorio}
+                        onChange={(e) => {
+                          const valor = Number.parseInt(e.target.value, 10);
+                          setFormData({
+                            ...formData,
+                            preguntasPorSesionLaboratorio: Number.isNaN(valor) ? 1 : Math.max(1, valor),
+                          });
+                        }}
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Cada intento seleccionará aleatoriamente esta cantidad de preguntas del pool disponible.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Preguntas</h3>
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={archivoExcelRef}
+                          type="file"
+                          accept=".xlsx,.xls"
+                          className="hidden"
+                          onChange={manejarImportacionExcel}
+                        />
+                        <Button type="button" variant="outline" size="sm" onClick={descargarPlantillaExcel}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Descargar plantilla
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => archivoExcelRef.current?.click()}
+                          disabled={importandoPreguntas}
+                        >
+                          {importandoPreguntas ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="mr-2 h-4 w-4" />
+                          )}
+                          Importar preguntas (Excel)
+                        </Button>
+                        <Button type="button" onClick={agregarPregunta} size="sm">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Agregar pregunta
+                        </Button>
+                      </div>
+                    </div>
+
+                    {formData.preguntas.map((pregunta, preguntaIndex) => (
+                      <div key={preguntaIndex} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex justify-between items-start">
+                          <h4 className="font-medium">Pregunta {preguntaIndex + 1}</h4>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => eliminarPregunta(preguntaIndex)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="col-span-2">
+                            <Label>Texto de la pregunta *</Label>
+                            <Textarea
+                              value={pregunta.texto}
+                              onChange={(e) => actualizarPregunta(preguntaIndex, "texto", e.target.value)}
+                              placeholder="Escribe la pregunta aquí..."
+                              rows={2}
+                            />
+                          </div>
+                          <div>
+                            <Label>Categoría (opcional)</Label>
+                            <Input
+                              value={pregunta.categoria ?? ""}
+                              onChange={(e) => actualizarPregunta(preguntaIndex, "categoria", e.target.value)}
+                              placeholder="Ej: Estequiometría"
+                            />
+                          </div>
+                          <div>
+                            <Label>Puntos</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={pregunta.puntos}
+                              onChange={(e) =>
+                                actualizarPregunta(preguntaIndex, "puntos", Number.parseInt(e.target.value, 10))
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label>Opciones de respuesta</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => agregarOpcion(preguntaIndex)}
+                              disabled={pregunta.opciones.length >= OPCION_LETRAS.length}
+                            >
+                              <Plus className="mr-2 h-4 w-4" />
+                              Opción
+                            </Button>
+                          </div>
+
+                          {pregunta.opciones.map((opcion, opcionIndex) => (
+                            <div key={opcionIndex} className="flex items-center gap-2 p-2 border rounded">
+                              <input
+                                type="radio"
+                                name={`pregunta-${preguntaIndex}`}
+                                checked={opcion.esCorrecta}
+                                onChange={() => {
+                                  pregunta.opciones.forEach((_, idx) => {
+                                    actualizarOpcion(preguntaIndex, idx, "esCorrecta", idx === opcionIndex);
+                                  });
+                                }}
+                              />
+                              <span className="w-6 text-sm font-semibold">
+                                {(OPCION_LETRAS[opcionIndex] ?? String.fromCharCode(65 + opcionIndex))}.
+                              </span>
+                              <Input
+                                value={opcion.texto}
+                                onChange={(e) => actualizarOpcion(preguntaIndex, opcionIndex, "texto", e.target.value)}
+                                placeholder={`Opción ${OPCION_LETRAS[opcionIndex] ?? opcionIndex + 1}`}
+                                className="flex-1"
+                              />
+                              {pregunta.opciones.length > 2 && (
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => eliminarOpcion(preguntaIndex, opcionIndex)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div>
+                          <Label>Retroalimentación (opcional)</Label>
+                          <Textarea
+                            value={pregunta.retroalimentacion ?? ""}
+                            onChange={(e) => actualizarPregunta(preguntaIndex, "retroalimentacion", e.target.value)}
+                            placeholder="Comentario que verá el estudiante tras responder"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    ))}
+
+                    {formData.preguntas.length === 0 && (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>No hay preguntas agregadas</p>
+                        <p className="text-sm">Agrega manualmente o importa desde Excel</p>
+                        <div className="mt-4 flex items-center justify-center gap-2">
+                          <Button type="button" onClick={agregarPregunta} size="sm">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Crear pregunta
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        resetForm();
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSaving}
+                      onClick={() => {
+                        console.log('🟢 Botón "Crear laboratorio" clickeado');
+                        console.log('🔍 isSaving:', isSaving);
+                        console.log('🔍 dialogOpen:', dialogOpen);
+                      }}
+                    >
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : editingLaboratorio ? (
+                        "Actualizar laboratorio"
+                      ) : (
+                        "Crear laboratorio"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {cursos.length > 0 && (
+            <div className="w-full max-w-xs mb-6">
+              <Label htmlFor="curso">Curso</Label>
+              <Select value={cursoSeleccionado} onValueChange={manejarCambioCurso}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cursos.map((curso) => (
+                    <SelectItem key={curso.id} value={curso.id.toString()}>
+                      {curso.nombre} - {curso.nrc}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {laboratorios.length > 0 ? (
+              laboratorios.map((laboratorio) => (
+                <Card key={laboratorio.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <CardTitle className="text-lg">{laboratorio.titulo}</CardTitle>
+                        {laboratorio.descripcion && (
+                          <CardDescription>{laboratorio.descripcion}</CardDescription>
+                        )}
+                        <div className="flex gap-2 pt-1">
+                          <Badge
+                            variant="outline"
+                            className="border-sky-500 text-sky-600 bg-sky-50 dark:border-sky-400 dark:text-sky-200"
+                          >
+                            Laboratorio 3DLAB
+                          </Badge>
+                        </div>
+                      </div>
+                      <Badge variant={laboratorio.activa ? "default" : "secondary"}>
+                        {laboratorio.activa ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div>
+                        <strong>Curso:</strong> {laboratorio.cursoNombre ?? "N/A"}
+                      </div>
+                      <div>
+                        <strong>Intentos:</strong> Permanente e ilimitado
+                      </div>
+                      <div>
+                        <strong>Preguntas mínimas:</strong> {laboratorio.preguntasMinimasLaboratorio ?? 12}
+                      </div>
+                      <div>
+                        <strong>Preguntas por sesión:</strong> {laboratorio.preguntasPorSesionLaboratorio ?? 4}
+                      </div>
+                      <div>
+                        <strong>Disponibilidad:</strong> Siempre activo (sin fechas límite)
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex justify-between gap-2">
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => manejarEdicion(laboratorio)}>
+                        <Edit className="mr-1 h-4 w-4" />
+                        Editar
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => manejarDescargaExcel(laboratorio)}>
+                        <Download className="mr-1 h-4 w-4" />
+                        Excel
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link href={`/teacher/labs/${laboratorio.id}/resultados`}>
+                        <Button variant="outline" size="sm">
+                          <FileText className="mr-1 h-4 w-4" />
+                          Resultados
+                        </Button>
+                      </Link>
+                      <Button variant="destructive" size="sm" onClick={() => manejarEliminacion(laboratorio.id)}>
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        Eliminar
+                      </Button>
+                    </div>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-12">
+                <p className="text-muted-foreground">No hay laboratorios configurados para este curso</p>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="../build/LMSBackend.API.props" />
+</Project>

@@ -1,0 +1,313 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* UNAB Brand Colors - Light Mode */
+    --background: 0 0% 100%;
+    --foreground: 216 32% 17%; /* unab-navy-dark equivalent */
+    --card: 0 0% 100%;
+    --card-foreground: 216 32% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 216 32% 17%;
+    
+    /* Primary: UNAB Navy Blue */
+    --primary: 210 29% 24%; /* #2C3E50 */
+    --primary-foreground: 210 40% 98%;
+    
+    /* Secondary: UNAB Red accents */
+    --secondary: 0 65% 51%; /* #C53030 */
+    --secondary-foreground: 210 40% 98%;
+    
+    /* Muted and accents using UNAB grays */
+    --muted: 210 33% 97%; /* unab-gray-50 */
+    --muted-foreground: 215 25% 27%; /* unab-gray-600 */
+    --accent: 210 33% 97%;
+    --accent-foreground: 210 29% 24%;
+    
+    /* Destructive using UNAB red variants */
+    --destructive: 0 65% 51%; /* UNAB red */
+    --destructive-foreground: 210 40% 98%;
+    
+    /* Borders and inputs */
+    --border: 210 31% 87%; /* unab-gray-200 */
+    --input: 210 31% 87%;
+    --ring: 210 29% 24%; /* unab-navy for focus rings */
+    
+    /* Chart colors using UNAB palette */
+    --chart-1: 210 29% 24%; /* unab-navy */
+    --chart-2: 0 65% 51%; /* unab-red */
+    --chart-3: 215 25% 27%; /* unab-gray-600 */
+    --chart-4: 0 79% 72%; /* unab-red-light */
+    --chart-5: 210 20% 34%; /* unab-navy-light */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* UNAB Brand Colors - Dark Mode */
+    --background: 216 28% 7%; /* Very dark navy */
+    --foreground: 210 33% 97%;
+    --card: 216 28% 7%;
+    --card-foreground: 210 33% 97%;
+    --popover: 216 28% 7%;
+    --popover-foreground: 210 33% 97%;
+    
+    /* Primary: Lighter navy for dark mode */
+    --primary: 210 20% 34%; /* unab-navy-light */
+    --primary-foreground: 210 33% 97%;
+    
+    /* Secondary: Softer red for dark mode */
+    --secondary: 0 79% 72%; /* unab-red-light */
+    --secondary-foreground: 216 28% 7%;
+    
+    /* Muted using darker UNAB grays */
+    --muted: 215 25% 27%; /* unab-gray-600 */
+    --muted-foreground: 210 31% 87%;
+    --accent: 215 25% 27%;
+    --accent-foreground: 210 33% 97%;
+    
+    /* Destructive */
+    --destructive: 0 79% 72%; /* lighter red for dark mode */
+    --destructive-foreground: 216 28% 7%;
+    
+    /* Borders and inputs */
+    --border: 215 25% 27%;
+    --input: 215 25% 27%;
+    --ring: 210 20% 34%;
+    
+    /* Chart colors for dark mode */
+    --chart-1: 210 20% 34%; /* unab-navy-light */
+    --chart-2: 0 79% 72%; /* unab-red-light */
+    --chart-3: 210 31% 87%; /* unab-gray-200 */
+    --chart-4: 0 84% 86%; /* very light red */
+    --chart-5: 210 33% 97%; /* near white */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom animations for login page */
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Animation classes */
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.animate-spin-reverse {
+  animation: spin-reverse 6s linear infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
+}
+
+/* Animation delays */
+.animation-delay-500 {
+  animation-delay: 0.5s;
+}
+
+.animation-delay-1000 {
+  animation-delay: 1s;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-3000 {
+  animation-delay: 3s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Glassmorphism effect */
+.glass-effect {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.125);
+}
+
+/* Improved hover effects */
+.hover-lift {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Particle effects */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.particle-1 {
+  width: 4px;
+  height: 4px;
+  background: linear-gradient(45deg, #fbbf24, #f59e0b);
+  animation: float 8s ease-in-out infinite;
+}
+
+.particle-2 {
+  width: 6px;
+  height: 6px;
+  background: linear-gradient(45deg, #a855f7, #8b5cf6);
+  animation: float 6s ease-in-out infinite reverse;
+}
+
+.particle-3 {
+  width: 3px;
+  height: 3px;
+  background: linear-gradient(45deg, #3b82f6, #2563eb);
+  animation: float 10s ease-in-out infinite;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .animate-blob {
+    animation-duration: 10s;
+  }
+
+  .animate-spin-slow {
+    animation-duration: 12s;
+  }
+}
+
+/* Performance optimizations */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus styles for accessibility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-50;
+}
+
+/* Animation delays for chemical effects */
+.animation-delay-500 {
+  animation-delay: 0.5s;
+}
+
+.animation-delay-1000 {
+  animation-delay: 1s;
+}
+
+.animation-delay-1500 {
+  animation-delay: 1.5s;
+}
