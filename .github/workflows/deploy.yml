@@ -33,9 +33,9 @@ jobs:
         with:
           context: .
           push: true
-          tags: lmsregistry01.azurecr.io/lms-frontend:${{ github.sha }},lmsregistry01.azurecr.io/lms-frontend:latest
-          cache-from: type=registry,ref=lmsregistry01.azurecr.io/lms-frontend:buildcache
-          cache-to: type=registry,ref=lmsregistry01.azurecr.io/lms-frontend:buildcache,mode=max
+          tags: |
+            lmsregistry01.azurecr.io/lms-frontend:${{ github.sha }}
+            lmsregistry01.azurecr.io/lms-frontend:latest
 
       - name: Azure Login
         uses: azure/login@v1
