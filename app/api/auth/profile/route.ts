@@ -3,13 +3,14 @@ import { type NextRequest, NextResponse } from "next/server"
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization")
-
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ mensaje: "Token no proporcionado" }, { status: 401 })
     }
 
+    const baseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
+
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"}/api/usuarios/profile`,
+      `${baseUrl}/api/usuarios/profile`,
       {
         method: "GET",
         headers: {
@@ -35,15 +36,15 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization")
-
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json({ mensaje: "Token no proporcionado" }, { status: 401 })
     }
 
     const body = await request.json()
+    const baseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
 
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"}/api/usuarios/profile`,
+      `${baseUrl}/api/usuarios/profile`,
       {
         method: "PUT",
         headers: {
