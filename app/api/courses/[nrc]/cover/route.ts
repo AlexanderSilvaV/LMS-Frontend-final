@@ -81,14 +81,14 @@ export async function POST(request: NextRequest, { params }: { params: { nrc: st
 
     const backendFormData = new FormData()
     const fileBuffer = await archivo.arrayBuffer()
-    const forwardedFile = new File([fileBuffer], archivo.name, { type: archivo.type || "application/octet-stream" })
-    backendFormData.append("archivo", forwardedFile, forwardedFile.name)
+    const blob = new Blob([fileBuffer], { type: archivo.type || "application/octet-stream" })
+    backendFormData.append("archivo", blob, archivo.name)
 
     console.log("[COURSE COVER POST] Forwarding file", {
       nrc: sanitizedNrc,
-      nombre: forwardedFile.name,
-      size: forwardedFile.size,
-      tipo: forwardedFile.type,
+      nombre: archivo.name,
+      size: blob.size,
+      tipo: blob.type,
     })
 
     const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
