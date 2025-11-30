@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest, { params }: { params: { nrc: st
   const sanitizedNrc = rawNrc
 
   try {
-    const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
     const response = await fetch(`${apiUrl}/api/Cursos/${encodeURIComponent(sanitizedNrc)}/portada`, {
       method: "GET",
     })
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: { nrc: st
       tipo: forwardedFile.type,
     })
 
-    const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
     const backendHeaders = new Headers({ Authorization: authHeader })
     const fwdFor = request.headers.get("x-forwarded-for")
     const fwdHost = request.headers.get("x-forwarded-host")
@@ -161,7 +161,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { nrc: 
   const sanitizedNrc = rawNrc
 
   try {
-    const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5253"
     const response = await fetch(`${apiUrl}/api/Cursos/${encodeURIComponent(sanitizedNrc)}/portada`, {
       method: "DELETE",
       headers: {
@@ -189,3 +189,4 @@ export async function DELETE(request: NextRequest, { params }: { params: { nrc: 
     return NextResponse.json({ mensaje: "Error interno del servidor" }, { status: 500 })
   }
 }
+
